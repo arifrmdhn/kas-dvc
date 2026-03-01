@@ -330,7 +330,7 @@ export default function App() {
               </div>
               <div>
                 <h1 className="text-xl font-bold leading-none tracking-wide">DWIGARDA VANGUARD</h1>
-                <p className="text-xs text-slate-400 font-medium tracking-widest uppercase">Sistem Keuangan</p>
+                <p className="text-xs text-slate-400 font-medium tracking-widest uppercase">Sistem Keuangan DVC</p>
               </div>
             </div>
             
