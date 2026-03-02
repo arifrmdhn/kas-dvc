@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, Wallet, TrendingUp, TrendingDown, 
   Plus, History, Home, DollarSign, FileText,
-  Edit2, Trash2
+  Edit2, Trash2, Upload
 } from 'lucide-react';
 
 // --- FIREBASE CONFIGURATION ---
@@ -37,21 +37,25 @@ export default function App() {
 
   // Modal States - Menambah (Create)
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [paymentTarget, setPaymentTarget] = useState(null);
 
   // Modal States - Mengubah/Menghapus (Edit/Delete)
   const [isEditMemberModalOpen, setIsEditMemberModalOpen] = useState(false);
-  const [editingMember, setEditingMember] = useState({ id: '', name: '', section: '' });
+  const [editingMember, setEditingMember] = useState({ id: '', name: '', kelas: '', section: '' });
   
   const [isEditTxModalOpen, setIsEditTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState({ id: '', amount: '', description: '', category: '', type: '' });
 
   // Form States
-  const [memberForm, setMemberForm] = useState({ name: '', section: 'Brass' });
+  const [memberForm, setMemberForm] = useState({ name: '', kelas: '', section: 'Brass' });
   const [paymentForm, setPaymentForm] = useState({ amount: '', description: '' });
   const [expenseForm, setExpenseForm] = useState({ amount: '', description: '', category: 'Peralatan' });
+  
+  const [importText, setImportText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
 
   // --- MENGAMBIL DATA DARI FIREBASE REAL-TIME ---
   useEffect(() => {
@@ -114,11 +118,49 @@ export default function App() {
     if (!memberForm.name) return;
     await addDoc(collection(db, 'members'), {
       name: memberForm.name,
+      kelas: memberForm.kelas,
       section: memberForm.section,
       createdAt: Date.now()
     });
-    setMemberForm({ name: '', section: 'Brass' });
+    setMemberForm({ name: '', kelas: '', section: 'Brass' });
     setIsMemberModalOpen(false);
+  };
+
+  const handleImportMembers = async (e) => {
+    e.preventDefault();
+    if (!importText.trim()) return;
+
+    setIsImporting(true);
+    const rows = importText.trim().split('\n');
+
+    try {
+      for (let i = 0; i < rows.length; i++) {
+        const columns = rows[i].split('\t'); // Pemisah tab bawaan copy dari Excel/Spreadsheet
+        
+        // Lewati jika user tidak sengaja meng-copy judul (header) baris
+        if (columns[0] && columns[0].toLowerCase().includes('nama anggota')) continue;
+
+        const name = columns[0] ? columns[0].trim() : '';
+        const kelas = columns[1] ? columns[1].trim() : '';
+        const section = columns[2] ? columns[2].trim() : 'Lainnya';
+
+        // Hanya simpan jika ada namanya
+        if (name) {
+          await addDoc(collection(db, 'members'), {
+            name,
+            kelas,
+            section,
+            createdAt: Date.now() + i // + i agar urutannya tetap terjaga
+          });
+        }
+      }
+      setImportText('');
+      setIsImportModalOpen(false);
+    } catch (error) {
+      console.error("Error importing:", error);
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const openPaymentModal = (member, period) => {
@@ -176,6 +218,7 @@ export default function App() {
     if (!editingMember.name) return;
     await updateDoc(doc(db, 'members', editingMember.id), {
       name: editingMember.name,
+      kelas: editingMember.kelas || '',
       section: editingMember.section
     });
     setIsEditMemberModalOpen(false);
@@ -292,18 +335,27 @@ export default function App() {
           <h2 className="text-xl font-bold text-gray-800">Buku Kas Anggota</h2>
           <p className="text-sm text-gray-500">Data tersimpan aman di Cloud Database ☁️</p>
         </div>
-        <button 
-          onClick={() => setIsMemberModalOpen(true)}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shrink-0"
-        >
-          <Plus size={18} /> Tambah Anggota
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button 
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-2 bg-emerald-50 text-emerald-700 border border-emerald-200 px-4 py-2 rounded-lg hover:bg-emerald-100 transition-colors"
+          >
+            <Upload size={18} /> Import Data
+          </button>
+          <button 
+            onClick={() => setIsMemberModalOpen(true)}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Plus size={18} /> Tambah Anggota
+          </button>
+        </div>
       </div>
       <div className="overflow-x-auto pb-4">
         <table className="w-full text-left border-collapse min-w-max">
           <thead>
             <tr className="bg-gray-50 text-gray-600 text-sm">
               <th rowSpan={2} className="p-4 border-b border-r sticky left-0 bg-gray-50 z-10 shadow-[1px_0_0_#f3f4f6]">Nama Anggota</th>
+              <th rowSpan={2} className="p-4 border-b border-r">Kelas</th>
               <th rowSpan={2} className="p-4 border-b border-r">Bagian</th>
               {months.map(m => (
                 <th colSpan={4} key={m} className="p-2 border-b border-r text-center font-bold bg-indigo-50/50 text-indigo-800">{m}</th>
@@ -327,6 +379,7 @@ export default function App() {
                     </button>
                   </div>
                 </td>
+                <td className="p-4 border-b border-r text-gray-600 text-sm">{member.kelas || '-'}</td>
                 <td className="p-4 border-b border-r text-gray-600">
                   <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs whitespace-nowrap">{member.section}</span>
                 </td>
@@ -361,7 +414,7 @@ export default function App() {
             ))}
             {members.length === 0 && (
               <tr>
-                <td colSpan={periods.length + 3} className="p-8 text-center text-gray-500">Belum ada data anggota. Tambahkan anggota pertama Anda.</td>
+                <td colSpan={periods.length + 4} className="p-8 text-center text-gray-500">Belum ada data anggota. Tambahkan anggota pertama Anda.</td>
               </tr>
             )}
           </tbody>
@@ -489,6 +542,10 @@ export default function App() {
                 <input type="text" required value={memberForm.name} onChange={e => setMemberForm({...memberForm, name: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: Budi Santoso"/>
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+                <input type="text" value={memberForm.kelas} onChange={e => setMemberForm({...memberForm, kelas: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: X IPA 1 (Opsional)"/>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Bagian (Section)</label>
                 <select value={memberForm.section} onChange={e => setMemberForm({...memberForm, section: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
                   <option value="Brass">Brass</option>
@@ -507,6 +564,45 @@ export default function App() {
         </div>
       )}
 
+      {/* Modal Import Data */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-emerald-50">
+              <h3 className="font-bold text-lg text-emerald-800">Import Anggota dari Spreadsheet</h3>
+              <button onClick={() => setIsImportModalOpen(false)} className="text-emerald-500 hover:text-emerald-700 text-xl font-bold">&times;</button>
+            </div>
+            <form onSubmit={handleImportMembers} className="p-6 space-y-4">
+              <div className="bg-blue-50 text-blue-800 p-3 rounded-lg text-sm mb-4 border border-blue-100">
+                <p className="font-semibold mb-1">Cara Penggunaan:</p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Buka Google Spreadsheet / Excel Anda.</li>
+                  <li>Blok data kolom <b>Nama Anggota, Kelas, dan Section</b>.</li>
+                  <li>Copy (Ctrl+C), lalu klik pada kotak di bawah dan Paste (Ctrl+V).</li>
+                </ol>
+              </div>
+              <div>
+                <textarea 
+                  required 
+                  rows={6}
+                  value={importText} 
+                  onChange={e => setImportText(e.target.value)} 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-sm whitespace-pre" 
+                  placeholder="Paste data di sini..."
+                ></textarea>
+              </div>
+              
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setIsImportModalOpen(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50">Batal</button>
+                <button type="submit" disabled={isImporting} className={`flex-1 px-4 py-2 text-white rounded-lg font-medium ${isImporting ? 'bg-emerald-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                  {isImporting ? 'Mengimpor...' : 'Mulai Import'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal Edit Anggota */}
       {isEditMemberModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -519,6 +615,10 @@ export default function App() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
                 <input type="text" required value={editingMember.name} onChange={e => setEditingMember({...editingMember, name: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+                <input type="text" value={editingMember.kelas} onChange={e => setEditingMember({...editingMember, kelas: e.target.value})} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Opsional" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Bagian (Section)</label>
